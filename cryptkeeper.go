@@ -133,23 +133,34 @@ func (c *ConfigFile) Crypter() {
 	log.Printf("Processed file written to: %s\n", c.FilePath)
 }
 
-func LoadConfig(configPath string) (map[any]interface{}, error) {
-	configMap := make(map[any]any)
-	viper.SetConfigFile(configPath)
-	err := viper.ReadInConfig()
-	if err != nil {
-		return nil, fmt.Errorf("failed to read config file: %v", err)
-	}
 
-	//load the config data into the configMap map
-	for _, key := range viper.AllKeys() {
-		configMap[key] = viper.GetString(key)
-	}
-	// print out all the key/values in the configMap neatly
-	for key, value := range configMap {
-		fmt.Printf("%s = %v\n", key, value)
-	}
-	//materialize the variabls into a map
-	return configMap, nil
+// LoadConfig decrypts the given encrypted configuration file, loads the configuration,
+// and then re-encrypts the file. It requires the encrypted config file name that ends with .crypt
+// and the environment variable where the passkey is stored.
+func LoadConfig(encryptedConfigFile, environmentVar string) (map[string]interface{}, error) {
+    // Decrypt the config file
+    configFile := NewConfigFile(encryptedConfigFile, environmentVar)
+    if err := configFile.ProcessFile(); err != nil {
+        return nil, fmt.Errorf("failed to decrypt config file: %v", err)
+    }
 
+    // Load configuration
+    decryptedConfigFile := strings.TrimSuffix(encryptedConfigFile, ".crypt")
+    viper.SetConfigFile(decryptedConfigFile)
+    if err := viper.ReadInConfig(); err != nil {
+        return nil, fmt.Errorf("failed to read config file: %v", err)
+    }
+
+    configMap := make(map[string]interface{})
+    for _, key := range viper.AllKeys() {
+        configMap[key] = viper.Get(key)
+    }
+
+    // Re-encrypt the config file
+    configFile.FilePath = decryptedConfigFile
+    if err := configFile.ProcessFile(); err != nil {
+        return nil, fmt.Errorf("failed to re-encrypt config file: %v", err)
+    }
+
+    return configMap, nil
 }
