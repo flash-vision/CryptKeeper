@@ -10,69 +10,72 @@ import (
 	"io/ioutil"
 	"log"
 	"os"
-
+	"strings"
 	"github.com/spf13/viper"
 )
 
 type ConfigFile struct {
 	FilePath    string
 	IsEncrypt   bool
-	Destination string
+	EnvironmentVar string
 }
 
-func NewConfigFile(filePath string, isEncrypt bool, destination string) *ConfigFile {
+func NewConfigFile(filePath string, isEncrypt bool, environmentVar string) *ConfigFile {
     return &ConfigFile{
         FilePath:    filePath,
-        IsEncrypt:   isEncrypt,
-        Destination: destination,
+        EnvironmentVar: environmentVar,
     }
 }
-func getKey() string {
-	key := os.Getenv("CRYPTKEEPER_CRYPTKEY")
-    if key == "" {
-        log.Fatal("CRYPTKEEPER_CRYPTKEY environment variable is not set.")
-        os.Exit(1)
-    }
-	return key
-}
-
 func (c *ConfigFile) ProcessFile() error {
-	key := getKey()
-	// Read the source file
-	fileContent, err := ioutil.ReadFile(c.FilePath)
-	if err != nil {
-		log.Printf("Failed to read file: %s, error: %v\n", c.FilePath, err)
-		return err
-	}
+    key := os.Getenv(c.EnvironmentVar)
 
-	var result []byte
+    // Read the source file
+    fileContent, err := ioutil.ReadFile(c.FilePath)
+    if err != nil {
+        log.Printf("Failed to read file: %s, error: %v\n", c.FilePath, err)
+        return err
+    }
 
-	// Check operation mode and process the file accordingly
-	if c.IsEncrypt {
-		// Encrypt the file content
-		result, err = encrypt(fileContent, key)
-		if err != nil {
-			log.Printf("Failed to encrypt file: %v\n", err)
-			return err
-		}
-	} else {
-		// Decrypt the file content
-		result, err = decrypt(fileContent, key)
-		if err != nil {
-			log.Printf("Failed to decrypt file: %v\n", err)
-			return err
-		}
-	}
+    var result []byte
+    var newFilePath string
 
-	// Write the result to the destination file
-	err = ioutil.WriteFile(c.Destination, result, 0644)
-	if err != nil {
-		log.Printf("Failed to write to file: %s, error: %v\n", c.Destination, err)
-		return err
-	}
+    if strings.HasSuffix(c.FilePath, ".crypt") {
+        // Decrypt the file content
+        result, err = decrypt(fileContent, key)
+        if err != nil {
+            log.Printf("Failed to decrypt file: %v\n", err)
+            return err
+        }
+        newFilePath = strings.TrimSuffix(c.FilePath, ".crypt")
+    } else {
+        // Encrypt the file content
+        result, err = encrypt(fileContent, key)
+        if err != nil {
+            log.Printf("Failed to encrypt file: %v\n", err)
+            return err
+        }
+        newFilePath = c.FilePath + ".crypt"
+    }
 
-	return nil
+    // Write the result to the new file
+    err = ioutil.WriteFile(newFilePath, result, 0644)
+    if err != nil {
+        log.Printf("Failed to write to file: %s, error: %v\n", newFilePath, err)
+        return err
+    }
+
+    // Remove the original file
+    if err := os.Remove(c.FilePath); err != nil {
+        log.Printf("Failed to remove the original file: %s, error: %v\n", c.FilePath, err)
+        return err
+    }
+
+    // Update the FilePath to the new file's path
+    c.FilePath = newFilePath
+
+    return nil
 }
+
 
 func createHash(key string) []byte {
 	hasher := sha256.New()
@@ -118,7 +121,7 @@ func decrypt(data []byte, passphrase string) ([]byte, error) {
 
 // Repurposed crypter function
 func (c *ConfigFile) Crypter() {
-	if len(getKey()) == 0 {
+	if len(os.Getenv(c.EnvironmentVar)) == 0 {
 		log.Fatal("Encryption key is not set.")
 		os.Exit(1)
 	}
@@ -128,7 +131,7 @@ func (c *ConfigFile) Crypter() {
 		log.Fatalf("Failed to process file: %v", err)
 	}
 
-	log.Printf("Processed file written to: %s\n", c.Destination)
+	log.Printf("Processed file written to: %s\n", c.FilePath)
 }
 
 func LoadConfig(configPath string) (map[any]interface{}, error) {
