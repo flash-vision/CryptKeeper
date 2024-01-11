@@ -20,7 +20,7 @@ type ConfigFile struct {
 	EnvironmentVar string
 }
 
-func NewConfigFile(filePath string, isEncrypt bool, environmentVar string) *ConfigFile {
+func NewConfigFile(filePath string, environmentVar string) *ConfigFile {
 	return &ConfigFile{
 		FilePath:       filePath,
 		EnvironmentVar: environmentVar,
