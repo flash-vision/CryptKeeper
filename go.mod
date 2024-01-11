@@ -1,4 +1,4 @@
-module cryptkeeper
+module github.com/flash-vision/cryptkeeper
 
 go 1.21.4
 
